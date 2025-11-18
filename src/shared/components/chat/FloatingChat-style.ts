@@ -129,6 +129,7 @@ export const Message = styled.div`
   border-radius: 16px;
   word-wrap: break-word;
   line-height: 1.4;
+  white-space: pre-wrap; /* <-- Adicionado para respeitar quebras de linha do Gemini */
   animation: fadeIn 0.3s ease-out;
 
   @keyframes fadeIn {

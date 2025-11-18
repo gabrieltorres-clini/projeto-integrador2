@@ -1,57 +1,76 @@
-// pages/Agenda.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import moment from "moment";
-import { Calendar, momentLocalizer } from "react-big-calendar";
+import { Calendar, momentLocalizer, Views } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
+import axios from "axios";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
+import "moment/locale/pt-br";
+import GlobalStyle from "../styles/global";
 
-const CalendarioArrastar = withDragAndDrop(Calendar);
-const localizador = momentLocalizer(moment);
+import {
+  Overlay,
+  Modal,
+  Input,
+  Botoes,
+  BtnSalvar,
+  BtnCancelar,
+  BtnDeletar,
+  EventoLinha,
+} from "../styles/modalStyled";
+
+moment.locale("pt-br");
+const localizer = momentLocalizer(moment);
+const DnDCalendar = withDragAndDrop(Calendar);
 
 function Agenda() {
-  const [eventos, setEventos] = useState([
-    {
-      id: 1,
-      titulo: "Reunião com equipe",
-      inicio: new Date(2025, 9, 23, 10, 0),
-      fim: new Date(2025, 9, 23, 11, 0),
-    },
-    {
-      id: 2,
-      titulo: "Almoço com cliente",
-      inicio: new Date(2025, 9, 24, 12, 30),
-      fim: new Date(2025, 9, 24, 13, 30),
-    },
-    {
-      id: 3,
-      titulo: "Treinamento",
-      inicio: new Date(2025, 9, 25, 14, 0),
-      fim: new Date(2025, 9, 25, 16, 0),
-    },
-  ]);
-
-  // ESTADOS DO MODAL
+  const [eventos, setEventos] = useState([]);
   const [modalAberto, setModalAberto] = useState(false);
   const [dataSelecionada, setDataSelecionada] = useState(null);
   const [tituloInput, setTituloInput] = useState("");
   const [eventoEditando, setEventoEditando] = useState(null);
 
-  // Mover evento
-  const aoMoverEvento = ({ event, start, end }) => {
-    const eventoQueMoveu = { ...event, inicio: start, fim: end };
-    setEventos(eventos.map((ev) => (ev.id === event.id ? eventoQueMoveu : ev)));
+  useEffect(() => {
+    const carregarEventos = async () => {
+      try {
+        const res = await axios.get("http://localhost:8800/agenda");
+        const eventosFormatados = res.data.map((ev) => ({
+          id: ev.idAgenda,
+          titulo: ev.evento,
+          inicio: new Date(ev.data),
+          fim: new Date(new Date(ev.data).getTime() + 60 * 60 * 1000),
+        }));
+        setEventos(eventosFormatados);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    carregarEventos();
+  }, []);
+
+  const aoMoverEvento = async ({ event, start, end }) => {
+    try {
+      await axios.put(`http://localhost:8800/agenda/${event.id}`, {
+        evento: event.titulo,
+        data: start.toISOString(),
+      });
+      setEventos(
+        eventos.map((ev) =>
+          ev.id === event.id ? { ...ev, inicio: start, fim: end } : ev
+        )
+      );
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-
-  const aoSelecionarEspaco = (slotInfo) => {
-    setDataSelecionada(slotInfo.start);
+  const aoSelecionarEspaco = ({ start }) => {
+    setDataSelecionada(start);
     setTituloInput("");
     setEventoEditando(null);
     setModalAberto(true);
   };
 
- 
   const abrirModalEvento = (event) => {
     setDataSelecionada(event.inicio);
     setTituloInput(event.titulo);
@@ -59,219 +78,163 @@ function Agenda() {
     setModalAberto(true);
   };
 
-  // Criar novo evento
-  const salvarNovoEvento = () => {
+  const salvarNovoEvento = async () => {
     if (!tituloInput) return;
-
-    const novoEvento = {
-      id: eventos.length + 1,
-      titulo: tituloInput,
-      inicio: dataSelecionada,
-      fim: new Date(dataSelecionada.getTime() + 60 * 60 * 1000),
-    };
-
-    setEventos([...eventos, novoEvento]);
-    setTituloInput("");
+    try {
+      const res = await axios.post("http://localhost:8800/agenda", {
+        evento: tituloInput,
+        data: dataSelecionada.toISOString(),
+      });
+      setEventos([
+        ...eventos,
+        {
+          id: res.data.idAgenda,
+          titulo: res.data.evento,
+          inicio: new Date(res.data.data),
+          fim: new Date(new Date(res.data.data).getTime() + 60 * 60 * 1000),
+        },
+      ]);
+      setModalAberto(false);
+      setTituloInput("");
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  // Editar evento existente
-  const salvarEdicao = () => {
+  const salvarEdicao = async () => {
     if (!tituloInput || !eventoEditando) return;
-
-    const atualizado = eventos.map((ev) =>
-      ev.id === eventoEditando.id ? { ...ev, titulo: tituloInput } : ev
-    );
-
-    setEventos(atualizado);
-    setEventoEditando(null);
-    setTituloInput("");
+    try {
+      await axios.put(`http://localhost:8800/agenda/${eventoEditando.id}`, {
+        evento: tituloInput,
+        data: eventoEditando.inicio.toISOString(),
+      });
+      setEventos(
+        eventos.map((ev) =>
+          ev.id === eventoEditando.id ? { ...ev, titulo: tituloInput } : ev
+        )
+      );
+      setEventoEditando(null);
+      setModalAberto(false);
+      setTituloInput("");
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  // Excluir evento
-  const deletarEvento = (id) => {
-    setEventos(eventos.filter((ev) => ev.id !== id));
+  const deletarEvento = async (id) => {
+    try {
+      await axios.delete(`http://localhost:8800/agenda/${id}`);
+      setEventos(eventos.filter((ev) => ev.id !== id));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  // Fechar modal
-  const fecharModal = () => {
-    setModalAberto(false);
-    setTituloInput("");
-    setEventoEditando(null);
-  };
-
-  const eventosDoDia = eventos.filter(
-    (ev) =>
-      moment(ev.inicio).format("YYYY-MM-DD") ===
-      moment(dataSelecionada).format("YYYY-MM-DD")
-  );
+  const eventosDoDia = dataSelecionada
+    ? eventos.filter(
+        (ev) =>
+          moment(ev.inicio).format("YYYY-MM-DD") ===
+          moment(dataSelecionada).format("YYYY-MM-DD")
+      )
+    : [];
 
   return (
-    <div style={{ height: "100vh", margin: "20px" }}>
-      <CalendarioArrastar
-        localizer={localizador}
-        events={eventos}
-        startAccessor="inicio"
-        endAccessor="fim"
-        selectable
-        style={{ height: "100%" }}
-        onEventDrop={aoMoverEvento}
-        onEventResize={aoMoverEvento}
-        onSelectSlot={aoSelecionarEspaco}
-        onSelectEvent={abrirModalEvento}
-      />
+    <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200 p-6">
+      <h1 className="text-2xl mb-4">Agendar Pacientes</h1>
+      <div className="bg-white rounded-2xl shadow-lg p-4 border border-slate-100">
+        <DnDCalendar
+          localizer={localizer}
+          events={eventos}
+          startAccessor="inicio"
+          endAccessor="fim"
+          selectable
+          resizable
+          onEventDrop={aoMoverEvento}
+          onEventResize={aoMoverEvento}
+          onSelectSlot={aoSelecionarEspaco}
+          onSelectEvent={abrirModalEvento}
+          defaultView={Views.MONTH}
+          views={{ month: true, week: true, day: true, agenda: true }}
+          style={{ height: "75vh" }}
+          popup
+          eventPropGetter={() => ({
+            style: {
+              backgroundColor: "#3c5d8a",
+              borderRadius: "8px",
+              color: "white",
+              fontWeight: 500,
+              cursor: "pointer",
+              minHeight: "60px",
+              padding: "4px 8px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+            },
+          })}
+          components={{
+            event: ({ event }) => (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  height: "100%",
+                }}
+              >
+                <strong>{event.titulo}</strong>
+                <span style={{ fontSize: "0.75rem" }}>
+                  {moment(event.inicio).format("HH:mm")} -{" "}
+                  {moment(event.fim).format("HH:mm")}
+                </span>
+              </div>
+            ),
+          }}
+        />
+      </div>
 
       {modalAberto && (
-        <div style={styles.overlay}>
-          <div style={styles.modal}>
-            <h2 style={{ marginBottom: 10 }}>
-              {eventoEditando ? "Editar Consulta" : "Nova Consulta"}
-            </h2>
-
-            {/* Campo de texto */}
-            <input
+        <Overlay>
+          <Modal>
+            <h2>{eventoEditando ? "Editar Consulta" : "Nova Consulta"}</h2>
+            <Input
               type="text"
               placeholder="Descrição da consulta..."
               value={tituloInput}
               onChange={(e) => setTituloInput(e.target.value)}
-              style={styles.input}
             />
-
-            {/* Botões principais */}
-            <div style={styles.botoes}>
-              <button onClick={fecharModal} style={styles.btnCancelar}>
+            <Botoes>
+              <BtnCancelar onClick={() => setModalAberto(false)}>
                 Cancelar
-              </button>
+              </BtnCancelar>
+              <BtnSalvar
+                onClick={eventoEditando ? salvarEdicao : salvarNovoEvento}
+              >
+                Salvar
+              </BtnSalvar>
+            </Botoes>
 
-              {eventoEditando ? (
-                <button onClick={salvarEdicao} style={styles.btnSalvar}>
-                  Salvar
-                </button>
-              ) : (
-                <button onClick={salvarNovoEvento} style={styles.btnSalvar}>
-                  Salvar
-                </button>
-              )}
-            </div>
-
-            {/* Lista de eventos existentes no dia */}
-            {eventosDoDia.length > 0 && (
-              <>
-                <h3 style={{ marginTop: 20 }}>Consultas do dia:</h3>
-                {eventosDoDia.map((ev) => (
-                  <div key={ev.id} style={styles.eventoLinha}>
-                    <span>{ev.titulo}</span>
-
-                    <div>
-                      <button
-                        onClick={() => abrirModalEvento(ev)}
-                        style={styles.btnSalvar}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => deletarEvento(ev.id)}
-                        style={styles.btnDeletar}
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Botão adicionar mais */}
-                <button
-                  onClick={() => {
-                    setEventoEditando(null);
-                    setTituloInput("");
-                  }}
-                  style={styles.btnAdd}
-                >
-                  + Nova consulta
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+            {eventosDoDia.map((ev) => (
+              <EventoLinha key={ev.id}>
+                <span>
+                  {ev.titulo} ({moment(ev.inicio).format("HH:mm")} -{" "}
+                  {moment(ev.fim).format("HH:mm")})
+                </span>
+                <div>
+                  <BtnSalvar onClick={() => abrirModalEvento(ev)}>
+                    Editar
+                  </BtnSalvar>
+                  <BtnDeletar onClick={() => deletarEvento(ev.id)}>
+                    Excluir
+                  </BtnDeletar>
+                </div>
+              </EventoLinha>
+            ))}
+          </Modal>
+        </Overlay>
       )}
+      <GlobalStyle />
     </div>
   );
 }
-
-// ESTILOS INLINE
-const styles = {
-  overlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
-    background: "rgba(0,0,0,0.5)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 9999,
-  },
-  modal: {
-    width: "420px",
-    background: "#fff",
-    padding: "20px",
-    borderRadius: "10px",
-  },
-  input: {
-    width: "100%",
-    padding: "10px",
-    marginTop: "10px",
-    borderRadius: "8px",
-    border: "1px solid #ccc",
-  },
-  botoes: {
-    marginTop: "20px",
-    display: "flex",
-    justifyContent: "space-between",
-  },
-  btnSalvar: {
-    padding: "8px 16px",
-    background: "#4CAF50",
-    color: "#fff",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
-  btnCancelar: {
-    padding: "8px 16px",
-    background: "#777",
-    color: "#fff",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
-  btnDeletar: {
-    marginLeft: "10px",
-    padding: "6px 10px",
-    background: "#E53935",
-    color: "#fff",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
-  btnAdd: {
-    marginTop: "10px",
-    width: "100%",
-    padding: "10px",
-    background: "#2196F3",
-    color: "#fff",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
-  eventoLinha: {
-    marginTop: "10px",
-    padding: "10px",
-    background: "#f2f2f2",
-    borderRadius: "8px",
-    display: "flex",
-    justifyContent: "space-between",
-  },
-};
 
 export default Agenda;

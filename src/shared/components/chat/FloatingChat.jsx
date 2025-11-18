@@ -35,11 +35,11 @@ const FloatingChat = () => {
   }, [messages]);
 
   const sendMessageToGemini = async (userMessage) => {
-    // const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    // Substitua pela sua chave de API real
     const apiKey = "AIzaSyAJ5qPTPJp6kFrTXq_NdcYWIo7EK6UETf0";
 
     if (!apiKey) {
-      return "Erro: Chave da API do Gemini não configurada. Por favor, configure a variável VITE_GEMINI_API_KEY no arquivo .env";
+      return "Erro: Chave da API do Gemini não configurada.";
     }
 
     try {
@@ -56,21 +56,22 @@ const FloatingChat = () => {
                 parts: [
                   {
                     text: `
-Você é um assistente clínico para ortodontista. Receberá uma **descrição rápida do paciente**. A partir disso, gere automaticamente:
+Você é um assistente clínico odontológico. Receberá uma descrição rápida do paciente e deve gerar um relatório clínico **detalhado, organizado e conciso**, fácil de ler.  
 
-1) Resumo técnico (para o dentista)  
-2) Observações clínicas detalhadas (cáries, tártaro, fraturas, mobilidade, lesões gengivais)  
-3) Recomendações de acompanhamento (sem dar diagnóstico direto ao paciente)  
+O relatório deve conter 3 seções:
 
-Sempre entregue o resultado em JSON estruturado:
+1) RESUMO: parágrafo curto com queixas principais e área de atenção.
+2) OBSERVAÇÕES CLÍNICAS: liste os sinais mais importantes, cada item em linha separada.
+3) RECOMENDAÇÕES: liste os procedimentos ou orientações essenciais, em linhas curtas.
 
-{
-  "summary": "...",
-  "observations": ["...", "..."],
-  "recommendations": ["...", "..."]
-}
+Regras importantes:
+- Mantenha o relatório detalhado, mas não muito longo.
+- Evite repetições, excesso de texto ou informações secundárias.
+- Nunca use JSON, colchetes, aspas ou asteriscos (*).
+- Organize o texto com títulos claros e espaçamento entre seções.
+- Se houver informação incompleta, indique o que deve ser avaliado.
 
-Descrição rápida do paciente: ${userMessage}
+Descrição do paciente: ${userMessage}
 `,
                   },
                 ],
@@ -81,6 +82,9 @@ Descrição rápida do paciente: ${userMessage}
       );
 
       if (!response.ok) {
+        if (response.status === 503) {
+          return "O servidor do Gemini está temporariamente indisponível. Tente novamente em alguns instantes.";
+        }
         throw new Error(`Erro na API: ${response.status}`);
       }
 
@@ -88,13 +92,13 @@ Descrição rápida do paciente: ${userMessage}
       const botResponse = data.candidates[0]?.content?.parts[0]?.text;
 
       if (!botResponse) {
-        throw new Error("Resposta inválida da API");
+        return "Desculpe, não consegui gerar o relatório no momento.";
       }
 
       return botResponse;
     } catch (error) {
       console.error("Erro ao chamar API do Gemini:", error);
-      return "Desculpe, estou com dificuldades para processar sua mensagem no momento. Por favor, tente novamente em instantes.";
+      return "Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente mais tarde.";
     }
   };
 
